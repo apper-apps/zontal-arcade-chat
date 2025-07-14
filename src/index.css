@@ -124,18 +124,32 @@
   100% { background-position: 200% 0; }
 }
 
-/* Canvas safety rules to prevent zero-dimension errors */
+/* Enhanced canvas safety rules to prevent zero-dimension errors */
 canvas {
-  min-width: 1px;
-  min-height: 1px;
+  min-width: 1px !important;
+  min-height: 1px !important;
   display: block;
+  width: 100%;
+  height: 100%;
+  background-color: #1F2937;
 }
 
-/* Game iframe container */
+/* Canvas error prevention */
+canvas[width="0"], canvas[height="0"] {
+  display: none !important;
+}
+
+/* Canvas container safety */
+*:has(canvas) {
+  min-width: 1px;
+  min-height: 1px;
+}
+/* Enhanced game iframe container with canvas support */
 .game-iframe-container {
   position: relative;
   width: 100%;
   min-height: 400px;
+  min-width: 320px;
   background: #1F2937;
   border-radius: 8px;
   overflow: hidden;
@@ -146,15 +160,48 @@ canvas {
   height: 100%;
   border: none;
   min-height: 400px;
-}
-
-/* Ensure game containers have proper dimensions */
-.game-container {
   min-width: 320px;
-  min-height: 240px;
-  position: relative;
 }
 
+/* Canvas within iframe protection */
+.game-iframe-container iframe canvas {
+  min-width: 320px !important;
+  min-height: 240px !important;
+}
+/* Enhanced game containers with proper dimensions */
+.game-container {
+  min-width: 320px !important;
+  min-height: 240px !important;
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.game-container canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Canvas error state */
+.canvas-error {
+  width: 100%;
+  height: 100%;
+  background: #1F2937;
+  border: 2px dashed #EF4444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #EF4444;
+  font-weight: 500;
+}
+
+.canvas-error::before {
+  content: "⚠️ Canvas Error";
+  font-size: 16px;
+}
 /* Loading placeholder for games */
 .game-loading {
   width: 100%;

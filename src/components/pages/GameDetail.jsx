@@ -23,10 +23,12 @@ export function GameDetail() {
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [rating, setRating] = useState(0);
-  const [gameLoadError, setGameLoadError] = useState(false);
+const [gameLoadError, setGameLoadError] = useState(false);
   const [gameReady, setGameReady] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [comments, setComments] = useState([]);
+  const [canvasError, setCanvasError] = useState(false);
+  const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 });
   const [commentForm, setCommentForm] = useState({ author: "", email: "", content: "" });
   const [relatedGames, setRelatedGames] = useState([]);
   const gameContainerRef = useRef(null);
@@ -86,27 +88,101 @@ export function GameDetail() {
       window.removeEventListener('error', handleCanvasError);
     };
   }, []);
+// Canvas error handler for dimension issues
+  const handleCanvasError = (event) => {
+    if (event.target?.tagName === 'CANVAS' || event.message?.includes('canvas') || event.message?.includes('drawImage')) {
+      console.error('Canvas error detected:', event);
+      setCanvasError(true);
+      setGameLoadError(true);
+      toast.error('Game rendering error - canvas dimension issue');
+    }
+  };
+
+  // Enhanced dimension validation
+  const validateContainerDimensions = () => {
+    if (!gameContainerRef.current) return false;
+    
+    const rect = gameContainerRef.current.getBoundingClientRect();
+    const computedStyle = window.getComputedStyle(gameContainerRef.current);
+    
+    // Check both getBoundingClientRect and computed styles
+    const hasValidDimensions = (
+      rect.width > 0 && 
+      rect.height > 0 && 
+      parseInt(computedStyle.width) > 0 && 
+      parseInt(computedStyle.height) > 0
+    );
+    
+    setContainerDimensions({ width: rect.width, height: rect.height });
+    return hasValidDimensions;
+  };
 
   const handlePlay = () => {
     try {
-      // Ensure container has proper dimensions
-      if (gameContainerRef.current) {
-        const rect = gameContainerRef.current.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) {
-          toast.error('Game container not ready - please try again');
+      // Reset error states
+      setCanvasError(false);
+      setGameLoadError(false);
+      
+      // Validate container dimensions
+      if (!validateContainerDimensions()) {
+        toast.error('Game container not ready - please try again');
+        return;
+      }
+
+      // Additional canvas validation
+      const canvasElements = gameContainerRef.current.querySelectorAll('canvas');
+      for (const canvas of canvasElements) {
+        if (canvas.width === 0 || canvas.height === 0) {
+          toast.error('Canvas dimension error - please wait for container to load');
           return;
         }
       }
 
       setIsPlaying(true);
-      setGameLoadError(false);
       toast.success('Game started!');
     } catch (error) {
       console.error('Error starting game:', error);
       setGameLoadError(true);
+      setCanvasError(true);
       toast.error('Failed to start game');
     }
   };
+
+  // Monitor container dimensions
+  useEffect(() => {
+    if (!gameContainerRef.current) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        setContainerDimensions({ width, height });
+        
+        // Reset canvas error if dimensions are now valid
+        if (width > 0 && height > 0 && canvasError) {
+          setCanvasError(false);
+        }
+      }
+    });
+
+    resizeObserver.observe(gameContainerRef.current);
+
+    return () => resizeObserver.disconnect();
+  }, [canvasError]);
+
+  // Canvas error event listeners
+  useEffect(() => {
+    const handleGlobalCanvasError = (event) => {
+      if (event.target?.tagName === 'CANVAS' || 
+          event.message?.includes('canvas') || 
+          event.message?.includes('drawImage') ||
+          event.message?.includes('InvalidStateError')) {
+        handleCanvasError(event);
+      }
+    };
+
+    window.addEventListener('error', handleGlobalCanvasError);
+    return () => window.removeEventListener('error', handleGlobalCanvasError);
+  }, []);
 
 const handleFavorite = () => {
     setIsFavorite(!isFavorite);
@@ -247,6 +323,9 @@ const handleRate = (stars) => {
                   <div className="w-3 h-3 bg-success rounded-full"></div>
                 </div>
                 <div className="flex items-center space-x-2">
+                  <div className="text-xs text-gray-400">
+                    {containerDimensions.width}x{containerDimensions.height}
+                  </div>
                   <Button variant="ghost" size="sm" onClick={toggleFullscreen}>
                     <ApperIcon name={isFullscreen ? "Minimize" : "Maximize"} size={16} />
                   </Button>
@@ -257,29 +336,48 @@ const handleRate = (stars) => {
                 <div className={`aspect-video ${isFullscreen ? "fixed inset-0 z-50 bg-black" : ""}`}>
                   <div 
                     ref={gameContainerRef}
-                    className="w-full h-full"
+                    className="w-full h-full game-iframe-container"
+                    style={{ minWidth: '320px', minHeight: '240px' }}
                   >
-                    {gameLoadError ? (
-                      <div className="flex items-center justify-center h-full">
+                    {gameLoadError || canvasError ? (
+                      <div className="flex items-center justify-center h-full game-error">
                         <div className="text-center">
-                          <p className="text-lg font-semibold mb-2">Game Loading Error</p>
-                          <p className="text-sm mb-4">Canvas rendering failed - please try again</p>
-                          <Button 
-                            onClick={() => {
-                              setGameLoadError(false);
-                              setIsPlaying(false);
-                            }}
-                            variant="primary"
-                          >
-                            Retry Game
-                          </Button>
+                          <ApperIcon name="AlertTriangle" size={48} className="mx-auto mb-4 text-error" />
+                          <p className="text-lg font-semibold mb-2">
+                            {canvasError ? 'Canvas Rendering Error' : 'Game Loading Error'}
+                          </p>
+                          <p className="text-sm mb-4">
+                            {canvasError 
+                              ? 'Canvas dimension issue - game container not ready'
+                              : 'Failed to load game - please try again'
+                            }
+                          </p>
+                          <div className="space-y-2">
+                            <p className="text-xs text-gray-400">
+                              Container: {containerDimensions.width}x{containerDimensions.height}
+                            </p>
+                            <Button 
+                              onClick={() => {
+                                setGameLoadError(false);
+                                setCanvasError(false);
+                                setIsPlaying(false);
+                                setGameReady(false);
+                              }}
+                              variant="primary"
+                            >
+                              Retry Game
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ) : !gameReady ? (
-                      <div className="flex items-center justify-center h-full">
+                      <div className="flex items-center justify-center h-full game-loading">
                         <div className="text-center">
                           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
                           <p className="text-gray-400">Loading game...</p>
+                          <p className="text-xs text-gray-500 mt-2">
+                            Preparing canvas: {containerDimensions.width}x{containerDimensions.height}
+                          </p>
                         </div>
                       </div>
                     ) : (
@@ -288,8 +386,18 @@ const handleRate = (stars) => {
                         src={game.gameUrl || '/game-placeholder.html'}
                         title={game.title}
                         className="w-full h-full"
-                        onLoad={() => setGameReady(true)}
-                        onError={() => setGameLoadError(true)}
+                        onLoad={() => {
+                          // Additional validation after iframe loads
+                          if (validateContainerDimensions()) {
+                            setGameReady(true);
+                          } else {
+                            setGameLoadError(true);
+                          }
+                        }}
+                        onError={() => {
+                          console.error('Iframe loading error');
+                          setGameLoadError(true);
+                        }}
                         allow="fullscreen; autoplay; encrypted-media"
                         sandbox="allow-scripts allow-same-origin allow-forms"
                         allowFullScreen
