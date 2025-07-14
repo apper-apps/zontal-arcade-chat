@@ -1,4 +1,72 @@
-import categoryData from "@/services/mockData/categories.json";
+// Mock category data
+const categoryData = [
+  {
+    id: 1,
+    name: "Action",
+    description: "Fast-paced games with intense gameplay",
+    slug: "action",
+    icon: "⚔️",
+    color: "#EF4444",
+    gameCount: 45,
+    featured: true,
+    thumbnail: "/images/categories/action.jpg"
+  },
+  {
+    id: 2,
+    name: "Puzzle",
+    description: "Mind-bending puzzles and brain teasers",
+    slug: "puzzle",
+    icon: "🧩",
+    color: "#8B5CF6",
+    gameCount: 32,
+    featured: true,
+    thumbnail: "/images/categories/puzzle.jpg"
+  },
+  {
+    id: 3,
+    name: "Racing",
+    description: "High-speed racing and driving games",
+    slug: "racing",
+    icon: "🏎️",
+    color: "#F59E0B",
+    gameCount: 28,
+    featured: true,
+    thumbnail: "/images/categories/racing.jpg"
+  },
+  {
+    id: 4,
+    name: "RPG",
+    description: "Role-playing games with rich storylines",
+    slug: "rpg",
+    icon: "🗡️",
+    color: "#10B981",
+    gameCount: 21,
+    featured: true,
+    thumbnail: "/images/categories/rpg.jpg"
+  },
+  {
+    id: 5,
+    name: "Sports",
+    description: "Sports games and athletic competitions",
+    slug: "sports",
+    icon: "⚽",
+    color: "#3B82F6",
+    gameCount: 19,
+    featured: false,
+    thumbnail: "/images/categories/sports.jpg"
+  },
+  {
+    id: 6,
+    name: "Adventure",
+    description: "Explore vast worlds and epic quests",
+    slug: "adventure",
+    icon: "🗺️",
+    color: "#EC4899",
+    gameCount: 35,
+    featured: true,
+    thumbnail: "/images/categories/adventure.jpg"
+  }
+];
 
 let categories = [...categoryData];
 
