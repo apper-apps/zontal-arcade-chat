@@ -1,63 +1,117 @@
+import React, { useEffect, useRef, useState } from "react";
+import { Heart, Play, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { useState } from "react";
+import { cn } from "@/utils/cn";
+import ApperIcon from "@/components/ApperIcon";
 import Badge from "@/components/atoms/Badge";
 import Button from "@/components/atoms/Button";
-import ApperIcon from "@/components/ApperIcon";
-import { cn } from "@/utils/cn";
+import Card from "@/components/atoms/Card";
 
-const GameCard = ({ game, className, variant = "default" }) => {
-  const [isLiked, setIsLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(game.likes || 0);
+export function GameCard({ game, onPlay, onFavorite, isFavorite }) {
+  const [imageError, setImageError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [gameError, setGameError] = useState(false);
+  const [likeCount, setLikeCount] = useState(game?.likes || 0);
+  const [isLiked, setIsLiked] = useState(isFavorite || false);
+  const cardRef = useRef(null);
+  const handleImageLoad = () => {
+    setIsLoading(false);
+  };
 
-  const handleLike = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleImageError = () => {
+    setImageError(true);
+    setIsLoading(false);
+  };
+
+  const handlePlay = () => {
+    try {
+      // Ensure card dimensions are available before playing
+      if (cardRef.current) {
+        const rect = cardRef.current.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) {
+          setGameError(true);
+          return;
+        }
+      }
+      
+      if (onPlay) {
+        onPlay(game);
+      }
+    } catch (error) {
+      console.error('Error playing game:', error);
+      setGameError(true);
+    }
+  };
+
+  const handleFavorite = () => {
+    if (onFavorite) {
+      onFavorite(game);
+    }
+};
+
+  const handleLike = () => {
+    if (onFavorite) {
+      onFavorite(game);
+    }
     setIsLiked(!isLiked);
     setLikeCount(prev => isLiked ? prev - 1 : prev + 1);
   };
 
-  const handlePlay = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Navigate to game page
-    window.location.href = `/game/${game.slug}`;
-  };
+  // Monitor for canvas errors in game content
+  useEffect(() => {
+    const handleCanvasError = (event) => {
+      if (event.target.tagName === 'CANVAS' || event.message?.includes('canvas')) {
+        console.warn('Canvas error detected in game card:', event);
+        setGameError(true);
+      }
+    };
+
+    window.addEventListener('error', handleCanvasError);
+    return () => window.removeEventListener('error', handleCanvasError);
+  }, []);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -5 }}
-      className={cn("group", className)}
+    <Card 
+      ref={cardRef}
+      className="game-card relative group overflow-hidden bg-surface border-gray-700 game-container"
     >
-      <Link to={`/game/${game.slug}`}>
-        <div className="game-card bg-surface rounded-lg overflow-hidden border border-gray-700 hover:border-primary/50 transition-all duration-300">
-          {/* Game Thumbnail */}
-          <div className="relative aspect-[4/3] overflow-hidden">
-            <img
-              src={game.thumbnail}
-              alt={game.title}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-            />
-            
-            {/* Overlay */}
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-300 flex items-center justify-center">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                whileHover={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Button
-                  onClick={handlePlay}
-                  size="lg"
-                  className="play-button bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 rounded-full w-16 h-16 p-0 opacity-0 group-hover:opacity-100 transition-all duration-300"
-                >
-                  <ApperIcon name="Play" size={24} className="ml-1" />
-                </Button>
-              </motion.div>
-            </div>
+      <div className="relative aspect-video overflow-hidden">
+        {isLoading && (
+          <div className="absolute inset-0 bg-gray-700 animate-pulse" />
+        )}
+        {!imageError ? (
+          <img
+            src={game.thumbnail}
+            alt={game.title}
+            className="w-full h-full object-cover transition-transform group-hover:scale-110"
+            onLoad={handleImageLoad}
+            onError={handleImageError}
+          />
+        ) : (
+          <div className="w-full h-full bg-gray-600 flex items-center justify-center">
+            <span className="text-gray-400">No Image</span>
+)}
+        
+        {/* Play Button Overlay */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            whileHover={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Button
+              onClick={handlePlay}
+              size="lg"
+              className="play-button bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 rounded-full w-16 h-16 p-0 opacity-0 group-hover:opacity-100 transition-all duration-300"
+            >
+              <ApperIcon name="Play" size={24} className="ml-1" />
+            </Button>
+          </motion.div>
+        </div>
+      </div>
 
+      {/* Featured Badge */}
             {/* Featured Badge */}
             {game.featured && (
               <div className="absolute top-2 left-2">
@@ -116,10 +170,10 @@ const GameCard = ({ game, className, variant = "default" }) => {
                 </div>
               </div>
             </div>
-          </div>
+</div>
         </div>
-      </Link>
-    </motion.div>
+      </div>
+    </Card>
   );
 };
 

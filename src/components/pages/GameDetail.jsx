@@ -1,68 +1,116 @@
-import { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { Heart, Play, Share2, Star } from "lucide-react";
 import { toast } from "react-toastify";
-import Button from "@/components/atoms/Button";
-import Badge from "@/components/atoms/Badge";
-import GameCard from "@/components/molecules/GameCard";
-import Loading from "@/components/ui/Loading";
-import Error from "@/components/ui/Error";
-import Empty from "@/components/ui/Empty";
+import { motion } from "framer-motion";
 import ApperIcon from "@/components/ApperIcon";
+import Badge from "@/components/atoms/Badge";
+import Button from "@/components/atoms/Button";
+import Card from "@/components/atoms/Card";
+import Empty from "@/components/ui/Empty";
+import Error from "@/components/ui/Error";
+import Loading from "@/components/ui/Loading";
 import { gameService } from "@/services/api/gameService";
 import { commentService } from "@/services/api/commentService";
 
-const GameDetail = () => {
-  const { slug } = useParams();
+export function GameDetail() {
+  const { id } = useParams();
   const [game, setGame] = useState(null);
-  const [relatedGames, setRelatedGames] = useState([]);
-  const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
+  const [rating, setRating] = useState(0);
+  const [gameLoadError, setGameLoadError] = useState(false);
+  const [gameReady, setGameReady] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-
-  const [commentForm, setCommentForm] = useState({
-    author: "",
-    email: "",
-    content: "",
-  });
+  const [comments, setComments] = useState([]);
+  const [commentForm, setCommentForm] = useState({ author: "", email: "", content: "" });
+  const [relatedGames, setRelatedGames] = useState([]);
+  const gameContainerRef = useRef(null);
+  const iframeRef = useRef(null);
 
   useEffect(() => {
-    loadGameData();
-  }, [slug]);
+    const fetchGame = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const gameData = await gameService.getGameById(id);
+        setGame(gameData);
+        setIsFavorite(gameData.isFavorite || false);
+        setIsLiked(gameData.isLiked || false);
+        setLikeCount(gameData.likeCount || 0);
+        setRating(gameData.rating || 0);
+        
+        // Load related games and comments
+        const [relatedData, commentsData] = await Promise.all([
+          gameService.getRelatedGames(gameData.category, gameData.Id),
+          commentService.getByGameId(gameData.Id)
+        ]);
+        
+        setRelatedGames(relatedData || []);
+        setComments(commentsData || []);
+      } catch (err) {
+        console.error('Error loading game:', err);
+        setError(err.message || 'Failed to load game');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const loadGameData = async () => {
+    if (id) {
+      fetchGame();
+    }
+  }, [id]);
+
+  // Canvas error monitoring
+  useEffect(() => {
+    const handleCanvasError = (event) => {
+      if (event.target.tagName === 'CANVAS' || event.message?.includes('canvas')) {
+        console.error('Canvas error in game:', event);
+        setGameLoadError(true);
+        toast.error('Game loading error - please try again');
+      }
+    };
+
+    const handleGameLoad = () => {
+      setGameReady(true);
+      setGameLoadError(false);
+    };
+
+    window.addEventListener('error', handleCanvasError);
+    
+    return () => {
+      window.removeEventListener('error', handleCanvasError);
+    };
+  }, []);
+
+  const handlePlay = () => {
     try {
-      setLoading(true);
-      setError("");
-      
-      const games = await gameService.getAll();
-      const gameData = games.find(g => g.slug === slug);
-      
-      if (!gameData) {
-        setError("Game not found");
-        return;
+      // Ensure container has proper dimensions
+      if (gameContainerRef.current) {
+        const rect = gameContainerRef.current.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) {
+          toast.error('Game container not ready - please try again');
+          return;
+        }
       }
 
-      setGame(gameData);
-      setLikeCount(gameData.likes || 0);
-      
-      // Load related games (same category)
-      const related = games
-        .filter(g => g.category === gameData.category && g.Id !== gameData.Id)
-        .slice(0, 4);
-      setRelatedGames(related);
-
-      // Load comments
-      const gameComments = await commentService.getByGameId(gameData.Id);
-      setComments(gameComments);
-    } catch (err) {
-      setError("Failed to load game data");
-    } finally {
-      setLoading(false);
+      setIsPlaying(true);
+      setGameLoadError(false);
+      toast.success('Game started!');
+    } catch (error) {
+      console.error('Error starting game:', error);
+      setGameLoadError(true);
+      toast.error('Failed to start game');
     }
+  };
+
+const handleFavorite = () => {
+    setIsFavorite(!isFavorite);
+    toast.success(isFavorite ? 'Removed from favorites' : 'Added to favorites');
   };
 
   const handleLike = () => {
@@ -70,6 +118,88 @@ const GameDetail = () => {
     setLikeCount(prev => isLiked ? prev - 1 : prev + 1);
     toast.success(isLiked ? "Removed from favorites" : "Added to favorites");
   };
+
+  const handleRate = (stars) => {
+    setRating(stars);
+    toast.success(`Rated ${stars} stars`);
+  };
+
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: game?.title || 'Game',
+        text: game?.description || 'Check out this game',
+        url: window.location.href
+      });
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      toast.success('Game link copied to clipboard!');
+    }
+  };
+
+  if (loading) return <Loading />;
+  if (error) return <Error message={error} />;
+  if (!game) return <Error message="Game not found" />;
+
+  return (
+    <div className="max-w-6xl mx-auto p-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Main Content */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Game Header */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-surface rounded-lg p-6 border border-gray-700"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center space-x-4">
+                <img
+                  src={game.thumbnail || '/placeholder-game.jpg'}
+                  alt={game.title}
+                  className="w-16 h-16 rounded-lg object-cover"
+                />
+                <div>
+                  <h1 className="text-2xl font-bold text-white">{game.title}</h1>
+                  <div className="flex items-center space-x-4 mt-1">
+                    <div className="flex items-center space-x-1 text-yellow-400">
+                      <ApperIcon name="Star" size={16} className="fill-current" />
+                      <span className="font-medium">{game.rating || 0}</span>
+                    </div>
+                    <div className="flex items-center space-x-1 text-gray-400">
+                      <ApperIcon name="Play" size={16} />
+                      <span>{game.plays || 0} plays</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="primary"
+                  onClick={handlePlay}
+                  disabled={isPlaying}
+                  className="flex items-center space-x-2"
+                >
+                  <Play size={16} />
+                  <span>{isPlaying ? 'Playing' : 'Play Game'}</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={handleLike}
+                  className={isLiked ? "text-accent" : ""}
+                >
+                  <Heart size={16} className={`mr-2 ${isLiked ? "fill-current" : ""}`} />
+                  {likeCount}
+                </Button>
+                <Button variant="secondary" onClick={() => handleShare("copy")}>
+                  <Share2 size={16} className="mr-2" />
+                  Share
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Game Player */}
 
   const handleShare = async (platform) => {
     const url = window.location.href;
@@ -114,76 +244,176 @@ const GameDetail = () => {
     }
   };
 
-  const toggleFullscreen = () => {
+const toggleFullscreen = () => {
     setIsFullscreen(!isFullscreen);
   };
 
-  if (loading) {
-    return <Loading type="cards" count={1} />;
-  }
-
-  if (error) {
-    return <Error message={error} onRetry={loadGameData} type="notFound" />;
-  }
-
-  if (!game) {
-    return <Error message="Game not found" type="notFound" />;
-  }
-
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-6xl mx-auto p-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Breadcrumb */}
-          <nav className="flex items-center space-x-2 text-sm text-gray-400">
-            <Link to="/" className="hover:text-white transition-colors">Home</Link>
-            <ApperIcon name="ChevronRight" size={16} />
-            <Link to={`/category/${game.category.toLowerCase()}`} className="hover:text-white transition-colors">
-              {game.category}
-            </Link>
-            <ApperIcon name="ChevronRight" size={16} />
-            <span className="text-white">{game.title}</span>
-          </nav>
-
           {/* Game Header */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-surface rounded-lg p-6 border border-gray-700"
           >
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
-              <div>
-                <h1 className="text-3xl font-bold gradient-text mb-2">{game.title}</h1>
-                <div className="flex items-center space-x-4">
-                  <Badge variant="primary">{game.category}</Badge>
-                  <div className="flex items-center space-x-1 text-yellow-400">
-                    <ApperIcon name="Star" size={16} className="fill-current" />
-                    <span className="font-medium">{game.rating}</span>
-                  </div>
-                  <div className="flex items-center space-x-1 text-gray-400">
-                    <ApperIcon name="Play" size={16} />
-                    <span>{game.plays || 0} plays</span>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center space-x-4">
+                <img
+                  src={game.thumbnail || '/placeholder-game.jpg'}
+                  alt={game.title}
+                  className="w-16 h-16 rounded-lg object-cover"
+                />
+                <div>
+                  <h1 className="text-2xl font-bold text-white">{game.title}</h1>
+                  <div className="flex items-center space-x-4 mt-1">
+                    <div className="flex items-center space-x-1 text-yellow-400">
+                      <ApperIcon name="Star" size={16} className="fill-current" />
+                      <span className="font-medium">{game.rating || 0}</span>
+                    </div>
+                    <div className="flex items-center space-x-1 text-gray-400">
+                      <ApperIcon name="Play" size={16} />
+                      <span>{game.plays || 0} plays</span>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="flex items-center space-x-2 mt-4 sm:mt-0">
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="primary"
+                  onClick={handlePlay}
+                  disabled={isPlaying}
+                  className="flex items-center space-x-2"
+                >
+                  <Play size={16} />
+                  <span>{isPlaying ? 'Playing' : 'Play Game'}</span>
+                </Button>
                 <Button
                   variant="secondary"
                   onClick={handleLike}
                   className={isLiked ? "text-accent" : ""}
                 >
-                  <ApperIcon name="Heart" size={16} className={`mr-2 ${isLiked ? "fill-current" : ""}`} />
+                  <Heart size={16} className={`mr-2 ${isLiked ? "fill-current" : ""}`} />
                   {likeCount}
                 </Button>
                 <Button variant="secondary" onClick={() => handleShare("copy")}>
-                  <ApperIcon name="Share" size={16} className="mr-2" />
+                  <Share2 size={16} className="mr-2" />
                   Share
                 </Button>
               </div>
             </div>
+          </motion.div>
+
+          {/* Game Player */}
+          {isPlaying && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-surface rounded-lg border border-gray-700 overflow-hidden"
+            >
+              <div className="flex items-center justify-between p-4 bg-gray-800">
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 bg-error rounded-full"></div>
+                  <div className="w-3 h-3 bg-warning rounded-full"></div>
+                  <div className="w-3 h-3 bg-success rounded-full"></div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button variant="ghost" size="sm" onClick={toggleFullscreen}>
+                    <ApperIcon name={isFullscreen ? "Minimize" : "Maximize"} size={16} />
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="relative">
+                <div className={`aspect-video ${isFullscreen ? "fixed inset-0 z-50 bg-black" : ""}`}>
+                  <div 
+                    ref={gameContainerRef}
+                    className="w-full h-full"
+                  >
+                    {gameLoadError ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="text-center">
+                          <p className="text-lg font-semibold mb-2">Game Loading Error</p>
+                          <p className="text-sm mb-4">Canvas rendering failed - please try again</p>
+                          <Button 
+                            onClick={() => {
+                              setGameLoadError(false);
+                              setIsPlaying(false);
+                            }}
+                            variant="primary"
+                          >
+                            Retry Game
+                          </Button>
+                        </div>
+                      </div>
+                    ) : !gameReady ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="text-center">
+                          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                          <p className="text-gray-400">Loading game...</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <iframe
+                        ref={iframeRef}
+                        src={game.gameUrl || '/game-placeholder.html'}
+                        title={game.title}
+                        className="w-full h-full"
+                        onLoad={() => setGameReady(true)}
+                        onError={() => setGameLoadError(true)}
+                        allow="fullscreen; autoplay; encrypted-media"
+                        sandbox="allow-scripts allow-same-origin allow-forms"
+                        allowFullScreen
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Game Description */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-surface rounded-lg p-6 border border-gray-700"
+          >
+            <h3 className="text-xl font-bold mb-4">About This Game</h3>
+            <p className="text-gray-300 leading-relaxed mb-6">
+              {game.description}
+            </p>
             
-            <p className="text-gray-300 leading-relaxed">{game.description}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-semibold mb-2">Game Details</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Category:</span>
+                    <span>{game.category}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Players:</span>
+                    <span>{game.players || 'Single Player'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Rating:</span>
+                    <span className="flex items-center">
+                      {[...Array(5)].map((_, i) => (
+                        <Star
+                          key={i}
+                          size={16}
+                          className={`${i < (game.rating || 0) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'}`}
+                        />
+                      ))}
+                      <span className="ml-1">{game.rating || 0}</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Tags */}
             {game.tags && game.tags.length > 0 && (
@@ -196,54 +426,7 @@ const GameDetail = () => {
               </div>
             )}
           </motion.div>
-
-          {/* Game Player */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-surface rounded-lg border border-gray-700 overflow-hidden"
-          >
-            <div className="flex items-center justify-between p-4 bg-gray-800">
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-error rounded-full"></div>
-                <div className="w-3 h-3 bg-warning rounded-full"></div>
-                <div className="w-3 h-3 bg-success rounded-full"></div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Button variant="ghost" size="sm" onClick={toggleFullscreen}>
-                  <ApperIcon name={isFullscreen ? "Minimize" : "Maximize"} size={16} />
-                </Button>
-              </div>
-            </div>
-            
-            <div className="relative">
-              <div className={`aspect-video ${isFullscreen ? "fixed inset-0 z-50 bg-black" : ""}`}>
-                <iframe
-                  src={game.gameUrl}
-                  title={game.title}
-                  className="w-full h-full"
-                  allowFullScreen
-                />
-              </div>
-              
-              <div className="absolute top-4 left-4 right-4 flex justify-between items-center opacity-0 hover:opacity-100 transition-opacity">
-                <div className="bg-black/50 backdrop-blur-sm rounded-lg px-3 py-1">
-                  <span className="text-white text-sm font-medium">{game.title}</span>
-                </div>
-                <div className="flex space-x-2">
-                  <Button size="sm" onClick={() => handleShare("facebook")}>
-                    <ApperIcon name="Facebook" size={16} />
-                  </Button>
-                  <Button size="sm" onClick={() => handleShare("twitter")}>
-                    <ApperIcon name="Twitter" size={16} />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Comments Section */}
+{/* Comments Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -312,7 +495,7 @@ const GameDetail = () => {
                       <div className="flex items-center space-x-2">
                         <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center">
                           <span className="text-white text-sm font-medium">
-                            {comment.author.charAt(0).toUpperCase()}
+                            {comment.author?.charAt(0).toUpperCase() || 'A'}
                           </span>
                         </div>
                         <div>
