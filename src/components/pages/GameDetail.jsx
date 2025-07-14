@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { Heart, Play, Share2, Star } from "lucide-react";
 import { toast } from "react-toastify";
 import { motion } from "framer-motion";
@@ -119,22 +119,56 @@ const handleFavorite = () => {
     toast.success(isLiked ? "Removed from favorites" : "Added to favorites");
   };
 
-  const handleRate = (stars) => {
+const handleRate = (stars) => {
     setRating(stars);
     toast.success(`Rated ${stars} stars`);
   };
 
-  const handleShare = () => {
-    if (navigator.share) {
-      navigator.share({
-        title: game?.title || 'Game',
-        text: game?.description || 'Check out this game',
-        url: window.location.href
-      });
-    } else {
-      navigator.clipboard.writeText(window.location.href);
-      toast.success('Game link copied to clipboard!');
+  const handleShare = async (platform) => {
+    const url = window.location.href;
+    const title = `Play ${game?.title || 'Game'} - Zontal Arcade`;
+    
+    let shareUrl = "";
+    switch (platform) {
+      case "facebook":
+        shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+        break;
+      case "twitter":
+        shareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}`;
+        break;
+      case "copy":
+        try {
+          await navigator.clipboard.writeText(url);
+          toast.success("Link copied to clipboard!");
+        } catch (err) {
+          toast.error("Failed to copy link");
+        }
+        return;
     }
+    
+    if (shareUrl) {
+      window.open(shareUrl, "_blank", "width=550,height=420");
+    }
+  };
+
+  const handleCommentSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const newComment = await commentService.create({
+        gameId: game?.Id,
+        ...commentForm,
+        status: "approved",
+      });
+      setComments([...comments, newComment]);
+      setCommentForm({ author: "", email: "", content: "" });
+      toast.success("Comment added successfully!");
+    } catch (err) {
+      toast.error("Failed to add comment");
+    }
+  };
+
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen);
   };
 
   if (loading) return <Loading />;
@@ -200,114 +234,7 @@ const handleFavorite = () => {
           </motion.div>
 
           {/* Game Player */}
-
-  const handleShare = async (platform) => {
-    const url = window.location.href;
-    const title = `Play ${game.title} - Zontal Arcade`;
-    
-    let shareUrl = "";
-    switch (platform) {
-      case "facebook":
-        shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
-        break;
-      case "twitter":
-        shareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}`;
-        break;
-      case "copy":
-        try {
-          await navigator.clipboard.writeText(url);
-          toast.success("Link copied to clipboard!");
-        } catch (err) {
-          toast.error("Failed to copy link");
-        }
-        return;
-    }
-    
-    if (shareUrl) {
-      window.open(shareUrl, "_blank", "width=550,height=420");
-    }
-  };
-
-  const handleCommentSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const newComment = await commentService.create({
-        gameId: game.Id,
-        ...commentForm,
-        status: "approved",
-      });
-      setComments([...comments, newComment]);
-      setCommentForm({ author: "", email: "", content: "" });
-      toast.success("Comment added successfully!");
-    } catch (err) {
-      toast.error("Failed to add comment");
-    }
-  };
-
-const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
-  };
-
-  return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Game Header */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-surface rounded-lg p-6 border border-gray-700"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center space-x-4">
-                <img
-                  src={game.thumbnail || '/placeholder-game.jpg'}
-                  alt={game.title}
-                  className="w-16 h-16 rounded-lg object-cover"
-                />
-                <div>
-                  <h1 className="text-2xl font-bold text-white">{game.title}</h1>
-                  <div className="flex items-center space-x-4 mt-1">
-                    <div className="flex items-center space-x-1 text-yellow-400">
-                      <ApperIcon name="Star" size={16} className="fill-current" />
-                      <span className="font-medium">{game.rating || 0}</span>
-                    </div>
-                    <div className="flex items-center space-x-1 text-gray-400">
-                      <ApperIcon name="Play" size={16} />
-                      <span>{game.plays || 0} plays</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="primary"
-                  onClick={handlePlay}
-                  disabled={isPlaying}
-                  className="flex items-center space-x-2"
-                >
-                  <Play size={16} />
-                  <span>{isPlaying ? 'Playing' : 'Play Game'}</span>
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={handleLike}
-                  className={isLiked ? "text-accent" : ""}
-                >
-                  <Heart size={16} className={`mr-2 ${isLiked ? "fill-current" : ""}`} />
-                  {likeCount}
-                </Button>
-                <Button variant="secondary" onClick={() => handleShare("copy")}>
-                  <Share2 size={16} className="mr-2" />
-                  Share
-                </Button>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Game Player */}
-          {isPlaying && (
+{isPlaying && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -426,7 +353,8 @@ const toggleFullscreen = () => {
               </div>
             )}
           </motion.div>
-{/* Comments Section */}
+
+          {/* Comments Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -571,7 +499,7 @@ const toggleFullscreen = () => {
           </motion.div>
         </div>
       </div>
-    </div>
+</div>
   );
 };
 
